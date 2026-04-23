@@ -30,10 +30,10 @@ Answer:
 """
 
     response = client.models.generate_content(
-        model="gemini-1.5-flash",
+        model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
         contents=prompt,
     )
 
-    return response.text if response.text else "No response"
+    return response.text or "No response"
 
     

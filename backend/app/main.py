@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
 from app.services.github_loader import clone_repo, load_code_files
 from app.services.embedding import get_embeddings
@@ -31,12 +31,13 @@ def ingest(repo_url: str):
 
         try:
             parsed = parse_python_file(content)
-        except:
+        except Exception:
             parsed = {"functions": [], "classes": []}
 
         try:
             imports = extract_imports(content)
-        except:
+        except Exception: 
+            
             imports = []
 
         chunks = chunk_code(content)
@@ -64,11 +65,20 @@ def ingest(repo_url: str):
 @app.post("/query")
 def query(q: str):
     if vector_store is None:
-        return {"error": "No repository indexed yet"}
+        raise HTTPException(status_code=400, detail="No repository indexed yet")
 
-    context = retrieve_context(q, vector_store)
-    answer = generate_answer(q, context)
-    score = evaluate_response(q, answer, context)
+    try:
+        context = retrieve_context(q, vector_store)
+        answer = generate_answer(q, context)
+        score = evaluate_response(q, answer, context)
+    except Exception as exc:
+        message = str(exc)
+        if "RESOURCE_EXHAUSTED" in message or "429" in message:
+            raise HTTPException(
+                status_code=429,
+                detail="Gemini API quota exceeded. Please retry later or use a key/project with available quota.",
+            ) from exc
+        raise HTTPException(status_code=500, detail=f"Query failed: {message}") from exc
 
     return {
         "answer": answer,
@@ -78,7 +88,16 @@ def query(q: str):
 
 @app.post("/debug")
 def debug(error: str, code: str = ""):
-    result = debug_error(error, code, vector_store)
+    try:
+        result = debug_error(error, code, vector_store)
+    except Exception as exc:
+        message = str(exc)
+        if "RESOURCE_EXHAUSTED" in message or "429" in message:
+            raise HTTPException(
+                status_code=429,
+                detail="Gemini API quota exceeded. Please retry later or use a key/project with available quota.",
+            ) from exc
+        raise HTTPException(status_code=500, detail=f"Debug failed: {message}") from exc
     return {"result": result}
 
 @app.get("/")

@@ -1,7 +1,7 @@
 from git import Repo
 import os
 
-def clone_repo(repo_url, clone_dir="repo"):
+def clone_repo(repo_url, clone_dir="backend_repo"):
     if os.path.exists(clone_dir):
         return clone_dir
     Repo.clone_from(repo_url, clone_dir)
