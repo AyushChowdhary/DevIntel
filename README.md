@@ -1,399 +1,162 @@
-# 🚀 DevIntel — AI-Powered Developer Intelligence Platform
+# DevIntel — AI-Powered Code Intelligence
 
-> **Turn developer activity and technical signals into actionable engineering insights.**
+> Explore a public GitHub codebase with a focused, private-by-design RAG workflow.
 
-**DevIntel** is an AI-powered developer intelligence platform designed to analyze software-development data, evaluate developer performance, and generate meaningful engineering insights using modern AI/ML techniques.
+DevIntel is a full-stack developer tool that indexes a public GitHub repository, retrieves
+the most relevant source code for a question, and uses Gemini to produce concise,
+file-aware explanations. It also includes an AI debugging view for investigating errors
+against the indexed codebase.
 
-Instead of relying only on traditional metrics, DevIntel combines **developer activity, technical signals, evaluation pipelines, and AI-driven analysis** to create a more intelligent view of software engineering performance.
+## Why DevIntel?
 
----
+Reading an unfamiliar repository is slow: developers need to locate the right files,
+trace relationships, and form a mental model before they can make a safe change.
+DevIntel shortens that first-pass investigation without pretending the model has access
+to code it has not retrieved.
 
-## ✨ Why DevIntel?
+## Highlights
 
-Modern engineering teams generate enormous amounts of technical data — commits, code changes, project activity, evaluations, and development patterns.
+- **Repository-aware Q&A** — clone and index a public HTTPS GitHub repository, then ask
+  natural-language questions about its implementation.
+- **Bring your own Gemini key** — a user enters their own key in the UI, so their own
+  Gemini project and quota are used.
+- **No key persistence** — API keys live only in browser memory for the active tab and
+  are passed to the backend per request. They are never put in local storage, a database,
+  logs, or the repository-index cache.
+- **Focused retrieval** — FAISS selects relevant code chunks before Gemini is called;
+  answers are instructed to cite files and identify insufficient context.
+- **Debug assistant** — submit an error and optional code snippet for a concise,
+  repository-aware debugging suggestion.
+- **Polished developer experience** — React interface with a guided three-step workflow,
+  password-style key input, clear key control, loading states, and useful API errors.
 
-The challenge isn't collecting this data.
-
-**The challenge is understanding it.**
-
-DevIntel aims to solve this by creating an intelligent layer that can transform raw engineering signals into:
-
-- 📊 Developer performance insights
-- 🧠 AI-assisted analysis
-- 🔍 Technical evaluation
-- 📈 Developer growth signals
-- ⚡ Actionable engineering intelligence
-
----
-
-## 🧠 Core Capabilities
-
-### 🤖 AI-Powered Developer Analysis
-Analyze developer-related signals and generate intelligent insights using AI/ML pipelines.
-
-### 📊 Developer Intelligence
-Transform development activity into structured information that can help understand productivity, technical strengths, and areas for improvement.
-
-### 🧪 Evaluation Pipeline
-Dedicated evaluation modules allow AI-generated results and developer intelligence models to be tested and analyzed systematically.
-
-### 🏋️ Model Training Pipeline
-DevIntel includes a dedicated training layer for experimenting with and improving machine-learning/AI components.
-
-### 🧩 Modular Backend Architecture
-The backend is organized into independent components such as:
+## Architecture
 
 ```text
-app/
-├── evaluation/
-├── services/
-├── training/
-├── utils/
-└── main.py
+React + Vite browser UI
+        |
+        | JSON + ephemeral session ID + per-request Gemini key
+        v
+FastAPI API
+  ├─ URL validation and shallow Git clone
+  ├─ Code loader, parser, chunker, and sentence-transformer embeddings
+  ├─ FAISS repository index cache (contains code embeddings only)
+  ├─ Diverse, size-limited context retrieval
+  └─ Gemini generation with a concise system instruction
+        |
+        v
+Answer or debugging guidance with source-file references
 ```
 
-This makes the system easier to extend as new models, evaluation strategies, and intelligence features are introduced.
+## Token-efficient RAG design
 
----
+DevIntel keeps both latency and Gemini input usage practical:
 
-## 🏗️ Architecture
+- Repository embeddings are cached in a bounded, in-memory LRU cache for the lifetime of
+  the server, so a repeated ingest does not re-embed the same codebase.
+- A separate ephemeral browser-session mapping prevents one user’s active repository from
+  replacing another user’s view; it never contains an API key.
+- Retrieval considers a broader candidate set, but sends at most **four** diverse chunks,
+  at most **two** from one file, and no more than **3,200 characters** of source context.
+- Gemini responses are capped at **500 output tokens**.
+- Debugging uses the same retrieved context once rather than duplicating it in the prompt.
+- Large files, generated folders, dependencies, and unsupported file types are skipped
+  before they affect cloning, embedding, or prompting.
 
-```text
-                    ┌──────────────────────┐
-                    │      Developer       │
-                    │     / Engineering    │
-                    │        Data          │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │    Data Processing   │
-                    │    & Feature Layer   │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-              ┌────────────────────────────────┐
-              │        DevIntel Engine         │
-              │                                │
-              │  ┌──────────┐  ┌───────────┐ │
-              │  │ Training │  │ Evaluation │ │
-              │  └──────────┘  └───────────┘ │
-              │                                │
-              │  ┌──────────────────────────┐ │
-              │  │      AI / ML Services    │ │
-              │  └──────────────────────────┘ │
-              └───────────────┬────────────────┘
-                              │
-                              ▼
-                    ┌──────────────────────┐
-                    │     Intelligence     │
-                    │      & Insights      │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │   Developer / Team   │
-                    │      Dashboard       │
-                    └──────────────────────┘
-```
+## Security choices
 
----
+| Concern | Implementation |
+| --- | --- |
+| Gemini credentials | Provided in `X-Gemini-API-Key` for one request only; never persisted or logged. |
+| Browser state | Key and session ID exist in React memory only, not browser storage. |
+| Repository source | Only public `https://github.com/owner/repository` URLs are accepted. |
+| Cross-origin access | CORS defaults to local Vite origins and can be restricted with `DEVINTEL_ALLOWED_ORIGINS`. |
+| Provider failures | Invalid keys, quota errors, and generic provider failures receive safe, actionable API responses. |
 
-## 🛠️ Tech Stack
+For production, serve both applications over HTTPS and set
+`DEVINTEL_ALLOWED_ORIGINS` to an explicit comma-separated allowlist.
 
-| Layer | Technologies |
-|---|---|
-| **Frontend** | React / Modern JavaScript |
-| **Backend** | Python |
-| **AI / ML** | Machine Learning + LLM-based intelligence |
-| **API** | RESTful architecture |
-| **Data Processing** | Python-based processing pipelines |
-| **Model Training** | Custom training pipeline |
-| **Evaluation** | Automated evaluation framework |
-| **Development** | Git, GitHub, VS Code |
-
-> The architecture is intentionally modular so additional AI models, data sources, and evaluation strategies can be integrated without redesigning the entire system.
-
----
-
-## 📁 Project Structure
-
-```text
-DevIntel/
-│
-├── backend/
-│   │
-│   ├── app/
-│   │   ├── evaluation/
-│   │   ├── services/
-│   │   ├── training/
-│   │   ├── utils/
-│   │   ├── __init__.py
-│   │   └── main.py
-│   │
-│   ├── requirements.txt
-│   ├── start.sh
-│   └── .gitignore
-│
-├── frontend/
-│
-├── .vscode/
-│
-├── package-lock.json
-└── README.md
-```
-
----
-
-## 🔄 How It Works
-
-### 1. Data Collection
-Developer and engineering signals are collected from relevant sources.
-
-### 2. Processing
-Raw information is cleaned, structured, and transformed into useful features.
-
-### 3. Intelligence Layer
-AI/ML services analyze the processed information to identify meaningful patterns.
-
-### 4. Evaluation
-The evaluation pipeline measures the quality and reliability of generated results.
-
-### 5. Insights
-DevIntel converts the analysis into structured intelligence that can support engineering and developer decisions.
-
----
-
-## 🎯 Engineering Challenges Solved
-
-DevIntel was built around several real-world engineering problems:
-
-- Designing an AI system around structured developer data
-- Separating model training from model evaluation
-- Building modular AI/ML services
-- Creating reproducible evaluation workflows
-- Designing a backend that can evolve with additional intelligence capabilities
-- Converting raw technical signals into useful engineering insights
-
----
-
-## 💡 What Makes This Project Interesting?
-
-DevIntel isn't simply an application that calls an LLM API.
-
-The project explores the **engineering layer around AI systems**:
-
-```text
-Data
-  ↓
-Processing
-  ↓
-Features
-  ↓
-AI / ML
-  ↓
-Evaluation
-  ↓
-Insights
-```
-
-This separation makes it possible to experiment with different models, evaluate their behavior, and continuously improve the intelligence layer.
-
----
-
-## 🚀 Getting Started
+## Run locally
 
 ### Prerequisites
 
-Make sure you have:
+- Python 3.10+
+- Node.js 20+
+- A [Gemini API key](https://aistudio.google.com/app/apikey) for asking questions
 
-- Python 3.x
-- Node.js
-- npm
-- Git
-
-### Clone the repository
+### Backend
 
 ```bash
 git clone https://github.com/AyushChowdhary/DevIntel.git
-cd DevIntel
-```
-
----
-
-### Backend Setup
-
-```bash
-cd backend
-```
-
-Create a virtual environment:
-
-```bash
-python -m venv venv
-```
-
-Activate it on macOS/Linux:
-
-```bash
-source venv/bin/activate
-```
-
-Install dependencies:
-
-```bash
+cd DevIntel/backend
+python -m venv .venv
+source .venv/bin/activate       # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+sh start.sh
 ```
 
-Create your environment configuration:
+The API starts at `http://127.0.0.1:8000`.
+
+### Frontend
+
+Open a second terminal:
 
 ```bash
-cp .env.example .env
-```
-
-Add the required API keys/configuration to `.env`.
-
-Start the backend:
-
-```bash
-./start.sh
-```
-
----
-
-### Frontend Setup
-
-```bash
-cd frontend
+cd DevIntel/frontend
 npm install
 npm run dev
 ```
 
-The frontend will then be available through the local development server.
+Open the Vite URL shown in the terminal (normally `http://127.0.0.1:5173`). The
+development proxy forwards `/api` to the backend automatically. For a separately hosted
+API, set `VITE_API_BASE_URL` during the frontend build.
 
----
+## How to use it
 
-## 🔐 Environment Variables
+1. Enter a Gemini API key. It is intentionally not saved when the page is refreshed.
+2. Paste a public GitHub repository URL and select **Index repository**.
+3. Ask a codebase question or switch to **Debug** to investigate an error.
+4. Use **Clear key** when finished with a shared computer.
 
-Never commit secrets or API keys to GitHub.
+## Project structure
 
-Create a `.env` file locally and configure the required environment variables.
-
-Example:
-
-```env
-API_KEY=your_api_key
-MODEL_NAME=your_model
-DATABASE_URL=your_database_url
+```text
+DevIntel/
+├── backend/
+│   ├── app/
+│   │   ├── evaluation/       # response-quality evaluation utilities
+│   │   ├── services/         # GitHub loading, embeddings, FAISS, RAG, Gemini
+│   │   ├── training/         # space for ML experimentation
+│   │   ├── utils/            # source chunking utilities
+│   │   └── main.py           # FastAPI routes and request boundaries
+│   ├── requirements.txt
+│   └── start.sh
+├── frontend/
+│   ├── src/                  # React application and responsive UI styles
+│   ├── package.json
+│   └── vite.config.js
+└── README.md
 ```
 
-> **Important:** Keep `.env` in `.gitignore`.
+## Interview talking points
 
----
+- **Privacy and multi-user isolation:** API keys are transient while repository indexes
+  are intentionally cacheable; separating those lifecycles avoids shared-key behaviour.
+- **RAG quality versus cost:** retrieval diversity and hard context/output caps keep the
+  prompt focused instead of sending an entire repository to an LLM.
+- **Defensive API design:** URL, size, and request-body validation narrow the failure
+  surface; public error messages do not expose provider internals or credential details.
+- **Pragmatic full stack delivery:** Vite’s development proxy, FastAPI endpoints, CORS,
+  error states, and the UI flow work together as one application.
 
-## 🧪 Evaluation & Experimentation
+## Future improvements
 
-One of the key goals of DevIntel is to make AI experimentation measurable.
+- Persist repository indexes in a shared vector store with safe eviction.
+- Add authenticated accounts, encrypted server-side provider connections, and rate limits.
+- Add repository branch selection and GitHub App integration for private repositories.
+- Stream answers and show source chunk citations directly in the UI.
 
-The evaluation layer is designed to answer questions such as:
+## Author
 
-- How reliable are the generated insights?
-- How consistent are model outputs?
-- How does one model compare with another?
-- Which evaluation criteria best represent developer intelligence?
-- How does model performance change after training or prompt modifications?
-
-This makes the project suitable for iterative experimentation rather than treating AI output as an unquestionable result.
-
----
-
-## 📈 Future Roadmap
-
-DevIntel can evolve into a complete engineering intelligence platform.
-
-### 🔹 Developer Intelligence
-- Developer skill profiling
-- Technical growth tracking
-- Personalized development recommendations
-- Project contribution analysis
-
-### 🔹 Engineering Analytics
-- Team-level engineering metrics
-- Project health analysis
-- Code-quality intelligence
-- Engineering bottleneck detection
-
-### 🔹 AI
-- Multi-model support
-- RAG-powered engineering knowledge
-- AI-generated development reports
-- Agentic developer analysis
-- Model benchmarking
-
-### 🔹 Platform
-- Authentication & role-based access
-- Organization/team management
-- Real-time analytics
-- Production deployment
-- Cloud-native architecture
-
----
-
-## 🧑‍💻 Engineering Principles
-
-DevIntel follows a few core principles:
-
-**Modularity**  
-AI, training, evaluation, and utility layers remain independently extensible.
-
-**Measurability**  
-AI systems should be evaluated instead of blindly trusted.
-
-**Reproducibility**  
-Experiments should be repeatable and comparable.
-
-**Security**  
-Credentials and sensitive configuration should remain outside the source code.
-
-**Scalability**  
-The architecture should allow additional models, data sources, and intelligence features to be introduced over time.
-
----
-
-## 🌟 Why This Project Matters
-
-Software engineering is increasingly becoming an **AI-assisted discipline**.
-
-As development teams adopt AI coding tools, the amount of engineering activity increases — but understanding that activity becomes harder.
-
-**DevIntel explores how AI can transform developer activity into engineering intelligence.**
-
-The long-term vision is simple:
-
-> ### **Build a smarter intelligence layer for modern software engineering.**
-
----
-
-## 👨‍💻 Author
-
-### Ayush Chowdhary
-
-Computer Science Student | AI/ML | Full-Stack Development | Software Engineering
-
-Interested in building **AI-native applications, intelligent developer tools, scalable backend systems, and practical ML solutions.**
-
-🔗 **GitHub:** [AyushChowdhary](https://github.com/AyushChowdhary?utm_source=chatgpt.com)
-
----
-
-## ⭐ Support
-
-If you find DevIntel interesting, consider giving the repository a ⭐.
-
-It helps the project gain visibility and motivates further development.
-
----
-
-## 📄 License
-
-This project is available under the license specified in the repository.
+**Ayush Chowdhary** — Computer Science student interested in AI/ML, full-stack systems,
+and practical developer tools. [GitHub](https://github.com/AyushChowdhary)

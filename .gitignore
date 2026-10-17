@@ -1,0 +1,17 @@
+# Local operating-system and editor files
+.DS_Store
+
+# JavaScript dependencies and build output
+node_modules/
+dist/
+.vite/
+
+# Python caches and local repository indexes
+__pycache__/
+*.py[cod]
+backend/.cache/
+
+# Secrets must remain local
+.env
+.env.*
+!.env.example
