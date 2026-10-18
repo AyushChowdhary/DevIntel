@@ -145,6 +145,23 @@ def build_vector_store(repo_url: str) -> tuple[VectorStore, int, int]:
 def raise_gemini_error(exc: Exception) -> None:
     """Return actionable but key-safe provider errors without exposing exception text."""
     message = str(exc).lower()
+    if (
+        "model" in message
+        and (
+            "not found" in message
+            or "not available" in message
+            or "unsupported" in message
+            or "deprecated" in message
+            or "shut down" in message
+        )
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "The configured Gemini model is unavailable. Set GEMINI_MODEL to a model "
+                "available to this Gemini project and restart the backend."
+            ),
+        ) from exc
     if "resource_exhausted" in message or "quota" in message or "429" in message:
         raise HTTPException(
             status_code=429,

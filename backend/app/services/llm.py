@@ -3,7 +3,9 @@ import os
 from google import genai
 from google.genai import types
 
-MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+# ``gemini-2.0-flash`` was shut down in 2026. Keep the model configurable while
+# using Google's maintained Flash alias as the no-configuration default.
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
 MAX_OUTPUT_TOKENS = 500
 SYSTEM_INSTRUCTION = (
     "You are DevIntel, a concise codebase assistant. Answer only from the supplied "
